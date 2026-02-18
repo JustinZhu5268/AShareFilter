@@ -32,6 +32,12 @@ env/
 *.swp
 *.swo
 
+# Cache
+data_cache/
+
+# Pytest
+.pytest_cache/
+
 # Report files (generated)
 选股报告_*.md
 选股结果*.csv
