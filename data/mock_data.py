@@ -22,14 +22,14 @@ from typing import Dict, Any
 def generate_mock_stock_list() -> pd.DataFrame:
     """生成模拟股票列表"""
     stocks = [
-        {'ts_code': '300274.SZ', 'symbol': '300274', 'name': '阳光电源', 'industry': '电气设备', 'list_date': '20110630'},
-        {'ts_code': '000001.SZ', 'symbol': '000001', 'name': '平安银行', 'industry': '银行', 'list_date': '19910403'},
-        {'ts_code': '600519.SH', 'symbol': '600519', 'name': '贵州茅台', 'industry': '白酒', 'list_date': '20010827'},
-        {'ts_code': '000858.SZ', 'symbol': '000858', 'name': '五粮液', 'industry': '白酒', 'list_date': '19980427'},
-        {'ts_code': '300750.SZ', 'symbol': '300750', 'name': '宁德时代', 'industry': '电池', 'list_date': '20180611'},
-        {'ts_code': '002594.SZ', 'symbol': '002594', 'name': '比亚迪', 'industry': '汽车整车', 'list_date': '20110630'},
-        {'ts_code': '600036.SH', 'symbol': '600036', 'name': '招商银行', 'industry': '银行', 'list_date': '20020409'},
-        {'ts_code': '000333.SZ', 'symbol': '000333', 'name': '美的集团', 'industry': '家电', 'list_date': '20130918'},
+        {'ts_code': '300274.SZ', 'symbol': '300274', 'name': '阳光电源', 'industry': '电气设备', 'list_date': '20110630', 'list_status': 'L'},
+        {'ts_code': '000001.SZ', 'symbol': '000001', 'name': '平安银行', 'industry': '银行', 'list_date': '19910403', 'list_status': 'L'},
+        {'ts_code': '600519.SH', 'symbol': '600519', 'name': '贵州茅台', 'industry': '白酒', 'list_date': '20010827', 'list_status': 'L'},
+        {'ts_code': '000858.SZ', 'symbol': '000858', 'name': '五粮液', 'industry': '白酒', 'list_date': '19980427', 'list_status': 'L'},
+        {'ts_code': '300750.SZ', 'symbol': '300750', 'name': '宁德时代', 'industry': '电池', 'list_date': '20180611', 'list_status': 'L'},
+        {'ts_code': '002594.SZ', 'symbol': '002594', 'name': '比亚迪', 'industry': '汽车整车', 'list_date': '20110630', 'list_status': 'L'},
+        {'ts_code': '600036.SH', 'symbol': '600036', 'name': '招商银行', 'industry': '银行', 'list_date': '20020409', 'list_status': 'L'},
+        {'ts_code': '000333.SZ', 'symbol': '000333', 'name': '美的集团', 'industry': '家电', 'list_date': '20130918', 'list_status': 'L'},
     ]
     return pd.DataFrame(stocks)
 
@@ -276,11 +276,26 @@ class MockTushareClient:
         """获取主力资金"""
         return pd.DataFrame(generate_mock_main_funds(ts_code))
     
-    def sw_index(self, level='1', src='SW'):
-        """获取申万行业 - Mock返回空数据"""
-        # 申万行业接口需要特殊权限，返回空DataFrame
-        return pd.DataFrame(columns=['index_code', 'industry_name'])
+    def index_classify(self):
+        """获取行业分类 - 使用正确的接口"""
+        data = [
+            {'index_code': '801010.SI', 'industry_name': '电气设备', 'level': 'L1', 'industry_code': '801010', 'src': 'SW2014'},
+            {'index_code': '801020.SI', 'industry_name': '采掘', 'level': 'L1', 'industry_code': '801020', 'src': 'SW2014'},
+            {'index_code': '801030.SI', 'industry_name': '化工', 'level': 'L1', 'industry_code': '801030', 'src': 'SW2014'},
+            {'index_code': '801040.SI', 'industry_name': '钢铁', 'level': 'L1', 'industry_code': '801040', 'src': 'SW2014'},
+            {'index_code': '801050.SI', 'industry_name': '有色金属', 'level': 'L1', 'industry_code': '801050', 'src': 'SW2014'},
+            {'index_code': '801080.SI', 'industry_name': '电子', 'level': 'L1', 'industry_code': '801080', 'src': 'SW2014'},
+            {'index_code': '801110.SI', 'industry_name': '家用电器', 'level': 'L1', 'industry_code': '801110', 'src': 'SW2014'},
+            {'index_code': '801120.SI', 'industry_name': '食品饮料', 'level': 'L1', 'industry_code': '801120', 'src': 'SW2014'},
+            {'index_code': '801150.SI', 'industry_name': '纺织服装', 'level': 'L1', 'industry_code': '801150', 'src': 'SW2014'},
+            {'index_code': '801210.SI', 'industry_name': '轻工制造', 'level': 'L1', 'industry_code': '801210', 'src': 'SW2014'},
+        ]
+        return pd.DataFrame(data)
     
-    def index_daily(self, index_code, start_date):
-        """获取行业指数数据"""
+    def sw_daily(self, index_code, start_date):
+        """获取申万行业日线数据"""
         return generate_mock_daily_data(index_code, 30)
+    
+    def index_daily(self, ts_code, start_date, end_date):
+        """获取指数日线数据 - 兼容旧接口"""
+        return generate_mock_daily_data(ts_code, 30)

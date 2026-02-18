@@ -113,11 +113,17 @@ class TushareClient:
         
         # 从API获取
         def _fetch():
+            if self.use_mock:
+                return self._mock_client.stock_basic(
+                    exchange='',
+                    list_status='L',
+                    fields='ts_code,symbol,name,industry,list_date,list_status'
+                )
             return self._call_with_retry(
                 self._pro.stock_basic,
                 exchange='',
                 list_status='L',
-                fields='ts_code,symbol,name,industry,list_date'
+                fields='ts_code,symbol,name,industry,list_date,list_status'
             )
         
         df = _fetch()
@@ -408,11 +414,12 @@ class TushareClient:
                     (df_cache['trade_date'] >= start_date) & 
                     (df_cache['trade_date'] <= end_date)
                 ]
-                if not df_cache.empty:
+                # 如果缓存数据足够，直接返回
+                if len(df_cache) >= 60:
                     self._runtime_cache[cache_key] = df_cache
                     return df_cache
         
-        # 从API获取
+        # 缓存数据不足，从API获取
         if self.use_mock:
             days = (datetime.datetime.strptime(end_date, '%Y%m%d') - 
                     datetime.datetime.strptime(start_date, '%Y%m%d')).days
@@ -456,11 +463,11 @@ class TushareClient:
             save_industry_rps_cache(df)
             return df
         
-        # 从API获取申万行业列表
+        # 从API获取申万行业列表 - 使用 index_classify
         def _fetch_sw():
             if self.use_mock:
-                return self._mock_client.sw_index(level='1', src='SW')
-            return self._pro.sw_index(level='1', src='SW')
+                return self._mock_client.index_classify()
+            return self._pro.index_classify()
         
         industry_list = self._call_with_retry(_fetch_sw)
         if industry_list is None or industry_list.empty:
@@ -473,13 +480,17 @@ class TushareClient:
             index_code = ind['index_code']
             industry_name = ind['industry_name']
             
-            # 获取行业指数数据
+            # 只处理一级行业
+            if ind.get('level') != 'L1':
+                continue
+            
+            # 获取行业指数数据 - 使用 sw_daily 接口
             start_date = (datetime.datetime.now() - datetime.timedelta(days=60)).strftime('%Y%m%d')
             
             def _fetch_idx():
                 if self.use_mock:
-                    return self._mock_client.index_daily(index_code=index_code, start_date=start_date)
-                return self._pro.index_daily(index_code=index_code, start_date=start_date)
+                    return self._mock_client.sw_daily(index_code=index_code, start_date=start_date)
+                return self._pro.sw_daily(index_code=index_code, start_date=start_date)
             
             df_ind = self._call_with_retry(_fetch_idx)
             

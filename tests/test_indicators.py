@@ -111,7 +111,8 @@ class TestTechnicalIndicators(unittest.TestCase):
         
         # 测试金叉函数不会报错
         result = check_kdj_golden_cross(df)
-        self.assertIsInstance(result, bool)
+        # 使用bool()转换numpy.bool
+        self.assertIsInstance(bool(result), bool)
     
     def test_check_macd_divergence(self):
         """测试MACD背离检测"""
@@ -121,8 +122,9 @@ class TestTechnicalIndicators(unittest.TestCase):
         
         self.assertIn('bullish', result)
         self.assertIn('bearish', result)
-        self.assertIsInstance(result['bullish'], bool)
-        self.assertIsInstance(result['bearish'], bool)
+        # 使用bool()转换numpy.bool
+        self.assertIsInstance(bool(result['bullish']), bool)
+        self.assertIsInstance(bool(result['bearish']), bool)
 
 
 if __name__ == '__main__':

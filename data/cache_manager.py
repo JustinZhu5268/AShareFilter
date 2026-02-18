@@ -13,9 +13,13 @@ import pandas as pd
 import datetime
 import warnings
 import json
+import threading
 from pathlib import Path
 
 warnings.filterwarnings('ignore')
+
+# 线程锁 - 用于并发访问缓存
+_cache_lock = threading.Lock()
 
 # 缓存目录
 CACHE_DIR = Path(__file__).parent.parent / "data_cache"
@@ -59,11 +63,12 @@ def is_cache_valid(cache_name: str, max_age_days: int = None) -> bool:
 
 
 def load_cache(cache_name: str) -> pd.DataFrame | None:
-    """加载缓存数据"""
+    """加载缓存数据 - 线程安全"""
     cache_path = get_cache_path(cache_name)
     if cache_path.exists():
         try:
-            df = pd.read_csv(cache_path, encoding='utf-8-sig')
+            with _cache_lock:
+                df = pd.read_csv(cache_path, encoding='utf-8-sig')
             return df
         except Exception as e:
             print(f"    [缓存] 加载失败 {cache_name}: {e}")
@@ -71,13 +76,14 @@ def load_cache(cache_name: str) -> pd.DataFrame | None:
 
 
 def save_cache(cache_name: str, df: pd.DataFrame | None):
-    """保存缓存数据"""
+    """保存缓存数据 - 线程安全"""
     if df is None or df.empty:
         return
 
     cache_path = get_cache_path(cache_name)
     try:
-        df.to_csv(cache_path, index=False, encoding='utf-8-sig')
+        with _cache_lock:
+            df.to_csv(cache_path, index=False, encoding='utf-8-sig')
     except Exception as e:
         print(f"    [缓存] 保存失败 {cache_name}: {e}")
 
