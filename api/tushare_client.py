@@ -9,9 +9,6 @@ Tushare API 客户端
 
 import sys
 import io
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
 import pandas as pd
 import numpy as np
 import datetime

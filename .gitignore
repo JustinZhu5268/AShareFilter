@@ -45,3 +45,8 @@ data_cache/
 # OS
 .DS_Store
 Thumbs.db
+
+# Coverage
+.coverage
+htmlcov/
+*.log

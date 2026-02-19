@@ -1,0 +1,278 @@
+# AShareFilter CI/CD Workflow
+# 自动运行测试和覆盖率报告
+
+name: AShareFilter Tests
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # 每天早上6点运行
+    - cron: '0 6 * * *'
+
+# 环境变量
+env:
+  USE_MOCK_DATA: 'true'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # 多Python版本测试矩阵
+  test-matrix:
+    runs-on: ubuntu-latest
+    name: Test on Python ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+        test-group: [unit, boundary, e2e, integration, api]
+        exclude:
+          - python-version: '3.12'
+            test-group: unit
+          - python-version: '3.12'
+            test-group: boundary
+          - python-version: '3.12'
+            test-group: integration
+          - python-version: '3.12'
+            test-group: api
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-html pytest-xdist
+
+      - name: Run Unit Tests
+        if: matrix.test-group == 'unit'
+        run: |
+          pytest tests/test_indicators.py tests/test_chips.py tests/test_cache.py -v --cov=. --cov-report=xml --cov-report=term --cov-branch
+
+      - name: Run Boundary Tests
+        if: matrix.test-group == 'boundary'
+        run: |
+          pytest tests/test_boundary.py -v -m boundary
+
+      - name: Run E2E Tests
+        if: matrix.test-group == 'e2e'
+        run: |
+          pytest tests/test_e2e_enhanced.py tests/test_integration.py -v -m e2e --cov=. --cov-report=xml --cov-report=term
+
+      - name: Run Integration Tests
+        if: matrix.test-group == 'integration'
+        run: |
+          pytest tests/test_integration.py -v -m integration
+
+      - name: Run API Tests
+        if: matrix.test-group == 'api'
+        run: |
+          pytest tests/test_api_client.py tests/test_data_clients.py -v -m api
+
+      - name: Upload coverage
+        if: matrix.test-group == 'unit' || matrix.test-group == 'e2e'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: ${{ matrix.test-group }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.test-group }}-${{ matrix.python-version }}
+          path: |
+            test-results/
+            report.html
+
+  # 性能测试
+  performance-test:
+    runs-on: ubuntu-latest
+    name: Performance Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run performance tests
+        env:
+          USE_MOCK_DATA: 'true'
+        run: |
+          pytest tests/test_performance.py -v -m performance
+
+  # 代码质量检查
+  lint:
+    runs-on: ubuntu-latest
+    name: Code Quality
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black pylint isort flake8
+
+      - name: Check code format with Black
+        run: |
+          black --check . || true
+
+      - name: Check imports with isort
+        run: |
+          isort --check-only --diff . || true
+
+      - name: Run flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
+
+      - name: Run pylint
+        run: |
+          pylint --exit-zero strategy/ api/ indicators/ data/ config/ || true
+
+  # 安全扫描
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run safety check
+        run: |
+          pip install safety
+          safety check || true
+
+      - name: Run bandit security scan
+        run: |
+          pip install bandit
+          bandit -r strategy/ api/ indicators/ data/ config/ -f txt || true
+
+  # 完整测试报告
+  full-test-report:
+    runs-on: ubuntu-latest
+    name: Full Test Report
+    needs: [test-matrix, performance-test, lint, security-scan]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-html
+
+      - name: Run all tests with HTML report
+        env:
+          USE_MOCK_DATA: 'true'
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-branch --html=report.html --self-contained-html
+
+      - name: Generate test summary
+        id: summary
+        run: |
+          # 获取测试统计
+          echo "## AShareFilter 测试报告" > test_summary.md
+          echo "" >> test_summary.md
+          echo "**日期**: $(date '+%Y-%m-%d %H:%M:%S')" >> test_summary.md
+          echo "**分支**: ${{ github.ref }}" >> test_summary.md
+          echo "**触发方式**: ${{ github.event_name }}" >> test_summary.md
+          echo "" >> test_summary.md
+          echo "### 各任务状态" >> test_summary.md
+          echo "| 任务 | 状态 |" >> test_summary.md
+          echo "|------|------|" >> test_summary.md
+          echo "| 测试矩阵 | ${{ needs.test-matrix.result }} |" >> test_summary.md
+          echo "| 性能测试 | ${{ needs.performance-test.result }} |" >> test_summary.md
+          echo "| 代码质量 | ${{ needs.lint.result }} |" >> test_summary.md
+          echo "| 安全扫描 | ${{ needs.security-scan.result }} |" >> test_summary.md
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            report.html
+            test_summary.md
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # 测试失败通知
+  notify-failure:
+    runs-on: ubuntu-latest
+    name: Notify on Failure
+    needs: [full-test-report]
+    if: failure()
+
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "AShareFilter CI/CD 测试失败！"
+          echo "请查看测试报告了解详情。"
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+
+      - name: Create GitHub Issue on failure
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '自动测试失败 - ' + new Date().toISOString().slice(0,10),
+              body: '## 测试失败报告\n\n' +
+                    '**触发时间**: ' + new Date().toISOString() + '\n' +
+                    '**分支**: ' + context.ref + '\n' +
+                    '**提交**: ' + context.sha + '\n\n' +
+                    '请查看 GitHub Actions 日志了解详情。'
+            })

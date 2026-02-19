@@ -1,0 +1,53 @@
+# AShareFilter 覆盖率配置
+
+# 源目录
+source = .
+
+# 排除的文件
+omit =
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */site-packages/*
+    */dist-packages/*
+    */venv/*
+    */env/*
+    .venv/*
+    venv/*
+    */data_cache/*
+    */test_reports/*
+    */htmlcov/*
+    run_*.py
+    setup.py
+    setup.cfg
+    pyproject.toml
+
+# 覆盖的分支
+branch = True
+
+# 报告格式
+[report]
+# 精确度
+precision = 2
+# 显示未覆盖的行
+show_missing = True
+# 跳过失败的模块
+skip_empty = True
+
+# 排除的行
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+    pass
+    ...
+    raise NotImplementedError
+
+[html]
+# HTML报告目录
+directory = test_reports/htmlcov

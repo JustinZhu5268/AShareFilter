@@ -3,17 +3,6 @@
 运行完整的选股筛选流程
 """
 
-import sys
-import io
-# 延迟设置stdout编码，避免与PowerShell冲突
-def setup_stdout():
-    if sys.platform == 'win32':
-        try:
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        except:
-            pass
-setup_stdout()
-
 import os
 import datetime
 import pandas as pd

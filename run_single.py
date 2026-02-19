@@ -4,16 +4,6 @@
 """
 
 import sys
-import io
-# 延迟设置stdout编码，避免与PowerShell冲突
-def setup_stdout():
-    if sys.platform == 'win32':
-        try:
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        except:
-            pass
-setup_stdout()
-
 import os
 import datetime
 import pandas as pd
@@ -41,13 +31,6 @@ from strategy.signal import generate_stock_report
 def main():
     """测试单只股票 - 300274 阳光电源"""
     start_time = time.time()
-    
-    # 检查stdout是否可用
-    try:
-        sys.stdout.write("test")
-    except (ValueError, IOError):
-        # 重新打开stdout
-        sys.stdout = open(1, 'w', encoding='utf-8', closefd=False)
     
     # 检查是否使用Mock模式
     use_mock = '--mock' in sys.argv or config.USE_MOCK_DATA
