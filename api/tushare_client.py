@@ -9,6 +9,9 @@ Tushare API 客户端
 
 import sys
 import io
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import pandas as pd
 import numpy as np
 import datetime
@@ -48,22 +51,22 @@ warnings.filterwarnings('ignore')
 
 class TushareClient:
     """Tushare API 客户端"""
-    
+
     def __init__(self, use_mock: bool = False):
         self.use_mock = use_mock or config.USE_MOCK_DATA
         self._pro = None
         self._init_client()
-        
+
         # 运行时缓存
         self._runtime_cache: Dict[str, Any] = {}
-    
+
     def _init_client(self):
         """初始化客户端"""
         if self.use_mock:
             print("🔧 使用 Mock 数据模式")
             self._mock_client = MockTushareClient()
             return
-        
+
         # 真实API初始化
         try:
             import tushare as ts
@@ -232,14 +235,14 @@ class TushareClient:
     def get_financial_ttm(self, ts_code: str) -> Dict[str, Any]:
         """
         获取TTM财务数据
-        返回: {'roe_ttm': float, 'net_profit_ttm': float, 'revenue_ttm': float}
+        返回: {'roe_ttm': float, 'net_profit_ttm': float, 'revenue_ttm': float, 'deducted_net_profit_ttm': float}
         """
         cache_key = f"fin_{ts_code}"
-        
+
         # 检查运行时缓存
         if cache_key in self._runtime_cache:
             return self._runtime_cache[cache_key]
-        
+
         # 尝试从缓存批量获取
         df_cache = load_financial_ttm_cache()
         if df_cache is not None:
@@ -250,35 +253,37 @@ class TushareClient:
                     'roe_ttm': float(row.get('roe', 0)),
                     'net_profit_ttm': float(row.get('net_profit', 0)),
                     'revenue_ttm': float(row.get('revenue', 0)),
+                    'deducted_net_profit_ttm': float(row.get('deducted_net_profit', 0)),
                 }
                 self._runtime_cache[cache_key] = result
                 return result
-        
-        # 从API获取
+
+        # 从API获取 - 增加扣非净利润字段
         def _fetch():
             if self.use_mock:
                 return self._mock_client.fina_indicator(
                     ts_code=ts_code,
-                    fields='ts_code,report_date,roe,net_profit,revenue'
+                    fields='ts_code,report_date,roe,net_profit,revenue,deducted_net_profit'
                 )
             return self._pro.fina_indicator(
                 ts_code=ts_code,
-                fields='ts_code,report_date,roe,net_profit,revenue'
+                fields='ts_code,report_date,roe,net_profit,revenue,deducted_net_profit'
             )
-        
+
         df = self._call_with_retry(_fetch)
-        
+
         if df is not None and not df.empty:
             # 按日期排序，取最新数据
             date_col = 'report_date'
             if date_col in df.columns:
                 df = df.sort_values(date_col, ascending=False)
-            
+
             latest = df.iloc[0]
             result = {
                 'roe_ttm': float(latest.get('roe', 0) or 0),
                 'net_profit_ttm': float(latest.get('net_profit', 0) or 0),
                 'revenue_ttm': float(latest.get('revenue', 0) or 0),
+                'deducted_net_profit_ttm': float(latest.get('deducted_net_profit', 0) or 0),
             }
             self._runtime_cache[cache_key] = result
             return result
@@ -288,6 +293,7 @@ class TushareClient:
             'roe_ttm': 0.0,
             'net_profit_ttm': 0.0,
             'revenue_ttm': 0.0,
+            'deducted_net_profit_ttm': 0.0,
         }
         self._runtime_cache[cache_key] = result
         return result
@@ -446,25 +452,38 @@ class TushareClient:
     # 行业RPS相关
     # ==========================================
     
-    def get_industry_rps(self) -> pd.DataFrame:
-        """获取行业RPS数据"""
-        # 尝试从缓存加载
-        if is_cache_valid('industry_rps', 1):
-            df = load_industry_rps_cache()
+    def get_industry_rps(self, level: str = 'L1') -> pd.DataFrame:
+        """获取行业RPS数据
+        
+        Args:
+            level: 行业级别，支持 'L1'(一级)、'L2'(二级)、'L3'(三级)，默认 'L1'
+        
+        Returns:
+            包含行业RPS数据的DataFrame
+        """
+        # 验证level参数
+        valid_levels = ['L1', 'L2', 'L3']
+        if level not in valid_levels:
+            raise ValueError(f"无效的行业级别: {level}，支持的级别: {valid_levels}")
+        
+        # 尝试从缓存加载（不同level使用不同的缓存key）
+        cache_key = f'industry_rps_{level}'
+        if is_cache_valid(cache_key, 1):
+            df = load_industry_rps_cache(level=level)
             if df is not None and not df.empty:
-                print(f"    -> 使用行业RPS缓存")
+                print(f"    -> 使用行业RPS缓存 ({level}级)")
                 return df
         
         if self.use_mock:
-            df = generate_mock_industry_rps()
-            save_industry_rps_cache(df)
+            df = generate_mock_industry_rps(level=level)
+            save_industry_rps_cache(df, level=level)
             return df
         
-        # 从API获取申万行业列表 - 使用 index_classify
+        # 从API获取申万行业列表 - 使用 index_classify，支持指定级别
         def _fetch_sw():
             if self.use_mock:
-                return self._mock_client.index_classify()
-            return self._pro.index_classify()
+                return self._mock_client.index_classify(level=level)
+            return self._pro.index_classify(level=level)
         
         industry_list = self._call_with_retry(_fetch_sw)
         if industry_list is None or industry_list.empty:
@@ -476,9 +495,10 @@ class TushareClient:
         for _, ind in industry_list.iterrows():
             index_code = ind['index_code']
             industry_name = ind['industry_name']
+            ind_level = ind.get('level')
             
-            # 只处理一级行业
-            if ind.get('level') != 'L1':
+            # 根据指定级别筛选行业
+            if ind_level != level:
                 continue
             
             # 获取行业指数数据 - 使用 sw_daily 接口
@@ -498,14 +518,15 @@ class TushareClient:
                     rps = (recent['close'].iloc[-1] - recent['close'].iloc[0]) / recent['close'].iloc[0] * 100
                     industry_rps.append({
                         'industry': industry_name,
+                        'industry_code': index_code,
                         'rps': rps,
-                        'code': index_code
+                        'level': level
                     })
         
         if industry_rps:
             df_rps = pd.DataFrame(industry_rps)
             df_rps = df_rps.sort_values('rps', ascending=False).reset_index(drop=True)
-            save_industry_rps_cache(df_rps)
+            save_industry_rps_cache(df_rps, level=level)
             return df_rps
         
         return None
@@ -579,6 +600,47 @@ class TushareClient:
             }
         
         return {'net_inflow_5d': 0}
+
+    # ==========================================
+    # 申万行业指数日线相关 (Agent 1)
+    # ==========================================
+
+    def get_sw_daily(self, index_code: str, days: int = 60) -> pd.DataFrame:
+        """
+        获取申万行业指数日线数据
+
+        Args:
+            index_code: 申万行业指数代码 (如 '801010' 表示电气设备)
+            days: 获取天数，默认60天
+
+        Returns:
+            包含行业指数日线数据的DataFrame
+        """
+        # 计算日期范围
+        end_date = datetime.datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d')
+
+        # 构建完整的指数代码
+        full_index_code = f"{index_code}.SI" if not index_code.endswith('.SI') else index_code
+
+        def _fetch():
+            if self.use_mock:
+                return self._mock_client.sw_daily(
+                    index_code=full_index_code,
+                    start_date=start_date
+                )
+            return self._pro.sw_daily(
+                index_code=full_index_code,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+        df = self._call_with_retry(_fetch)
+
+        if df is not None and not df.empty:
+            return df.sort_values('trade_date')
+
+        return pd.DataFrame()
 
 
 # 全局客户端实例

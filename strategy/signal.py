@@ -5,6 +5,9 @@
 from typing import Dict, Any, List
 from config import config
 
+# 导入风控管理
+from strategy.risk_management import get_risk_manager
+
 
 def evaluate_buy_signal(stock: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -121,7 +124,11 @@ def evaluate_buy_signal(stock: Dict[str, Any]) -> Dict[str, Any]:
     
     # 判断是否通过
     all_pass = all(s['status'] == 'pass' for s in must_have)
-    
+
+    # 风控评估
+    risk_manager = get_risk_manager()
+    risk_evaluation = risk_manager.evaluate_risk(stock)
+
     # 评级
     rating = ''
     recommendation = ''
@@ -137,7 +144,7 @@ def evaluate_buy_signal(stock: Dict[str, Any]) -> Dict[str, Any]:
     else:
         rating = '- 不建议'
         recommendation = '等待更好时机'
-    
+
     return {
         'stock_code': stock.get('code', ''),
         'stock_name': stock.get('name', ''),
@@ -147,6 +154,10 @@ def evaluate_buy_signal(stock: Dict[str, Any]) -> Dict[str, Any]:
         'rating': rating,
         'recommendation': recommendation,
         'qualified': all_pass,
+        # 风控评估结果
+        'risk_score': risk_evaluation.get('risk_score', 50),
+        'risk_level': risk_evaluation.get('risk_level', 'medium'),
+        'risk_factors': risk_evaluation.get('factors', []),
     }
 
 

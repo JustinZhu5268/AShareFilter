@@ -381,3 +381,324 @@ def get_latest_indicators(df: pd.DataFrame) -> Dict[str, Any]:
         # 量比
         'volume_ratio': calculate_volume_ratio(df),
     }
+
+
+# ==================== 支撑位共振判断 ====================
+
+def check_support_at_ma60(df: pd.DataFrame, tolerance: float = 0.03) -> Dict[str, Any]:
+    """
+    检查价格是否回踩MA60均线获得支撑
+
+    Args:
+        df: 包含close和ma60的DataFrame
+        tolerance: 容差范围（默认3%）
+
+    Returns:
+        {
+            'at_ma60': bool,           # 是否在MA60附近
+            'distance': float,          # 距离MA60的百分比
+            'close': float,            # 当前收盘价
+            'ma60': float,             # MA60值
+        }
+    """
+    if df is None or df.empty:
+        return {'at_ma60': False, 'distance': 0, 'close': 0, 'ma60': 0}
+
+    if 'ma60' not in df.columns:
+        df = calculate_ma(df, periods=[60])
+
+    if len(df) < 60 or df['ma60'].isna().iloc[-1]:
+        return {'at_ma60': False, 'distance': 0, 'close': 0, 'ma60': 0}
+
+    close = float(df['close'].iloc[-1])
+    ma60 = float(df['ma60'].iloc[-1])
+
+    if ma60 == 0:
+        return {'at_ma60': False, 'distance': 0, 'close': close, 'ma60': 0}
+
+    distance = (close - ma60) / ma60
+    at_ma60 = abs(distance) <= tolerance
+
+    return {
+        'at_ma60': at_ma60,
+        'distance': distance,
+        'close': close,
+        'ma60': ma60,
+    }
+
+
+def check_support_at_bollinger(df: pd.DataFrame, tolerance: float = 0.03) -> Dict[str, Any]:
+    """
+    检查价格是否回踩布林下轨获得支撑
+    """
+    if df is None or df.empty:
+        return {'at_bollinger': False, 'distance': 0, 'close': 0, 'bb_lower': 0}
+
+    if 'bb_lower' not in df.columns:
+        df = calculate_bollinger_bands(df)
+
+    if len(df) < 20 or df['bb_lower'].isna().iloc[-1]:
+        return {'at_bollinger': False, 'distance': 0, 'close': 0, 'bb_lower': 0}
+
+    close = float(df['close'].iloc[-1])
+    bb_lower = float(df['bb_lower'].iloc[-1])
+
+    if bb_lower == 0:
+        return {'at_bollinger': False, 'distance': 0, 'close': close, 'bb_lower': 0}
+
+    distance = (close - bb_lower) / bb_lower
+    at_bollinger = abs(distance) <= tolerance
+
+    return {
+        'at_bollinger': at_bollinger,
+        'distance': distance,
+        'close': close,
+        'bb_lower': bb_lower,
+    }
+
+
+def check_support_resonance(df: pd.DataFrame,
+                            ma60_tolerance: float = 0.03,
+                            bollinger_tolerance: float = 0.03) -> Dict[str, Any]:
+    """
+    检查支撑位共振 - 价格同时接近MA60和布林下轨
+    """
+    if df is None or df.empty:
+        return {
+            'resonance': False,
+            'at_ma60': False,
+            'at_bollinger': False,
+            'ma60_info': {},
+            'bollinger_info': {},
+            'support_level': 'none'
+        }
+
+    ma60_info = check_support_at_ma60(df, ma60_tolerance)
+    bollinger_info = check_support_at_bollinger(df, bollinger_tolerance)
+
+    resonance = ma60_info['at_ma60'] and bollinger_info['at_bollinger']
+
+    if resonance:
+        support_level = 'strong'
+    elif ma60_info['at_ma60'] or bollinger_info['at_bollinger']:
+        support_level = 'medium'
+    else:
+        support_level = 'none'
+
+    return {
+        'resonance': resonance,
+        'at_ma60': ma60_info['at_ma60'],
+        'at_bollinger': bollinger_info['at_bollinger'],
+        'ma60_info': ma60_info,
+        'bollinger_info': bollinger_info,
+        'support_level': support_level
+    }
+
+
+def analyze_support_level(stock_data) -> Dict[str, Any]:
+    """
+    分析支撑位级别
+
+    Args:
+        stock_data: 包含技术指标数据的字典或DataFrame
+
+    Returns:
+        支撑位分析结果
+    """
+    # 支持字典或DataFrame输入
+    if isinstance(stock_data, pd.DataFrame):
+        df = stock_data
+    else:
+        # 重建DataFrame用于分析
+        df = pd.DataFrame([stock_data])
+    return check_support_resonance(df)
+
+
+# ==================== 行业趋势判断 ====================
+
+def check_industry_above_ma20(industry_df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    检查行业指数是否站上20日均线
+
+    Args:
+        industry_df: 包含行业指数数据的DataFrame，需要有 close 列
+
+    Returns:
+        {
+            'above_ma20': bool,        # 是否站上20日均线
+            'close': float,            # 当前收盘价
+            'ma20': float,             # 20日均线值
+            'distance': float,         # 距离MA20的百分比
+            'trend': str,              # 趋势: 'uptrend'/'downtrend'/'sideways'
+        }
+    """
+    if industry_df is None or industry_df.empty:
+        return {
+            'above_ma20': False,
+            'close': 0,
+            'ma20': 0,
+            'distance': 0,
+            'trend': 'sideways'
+        }
+
+    if 'close' not in industry_df.columns:
+        return {
+            'above_ma20': False,
+            'close': 0,
+            'ma20': 0,
+            'distance': 0,
+            'trend': 'sideways'
+        }
+
+    if len(industry_df) < 20:
+        return {
+            'above_ma20': False,
+            'close': float(industry_df['close'].iloc[-1]) if len(industry_df) > 0 else 0,
+            'ma20': 0,
+            'distance': 0,
+            'trend': 'sideways'
+        }
+
+    ma20 = industry_df['close'].rolling(window=20).mean()
+    close = industry_df['close'].iloc[-1]
+    ma20_value = ma20.iloc[-1]
+
+    if ma20_value == 0 or pd.isna(ma20_value):
+        return {
+            'above_ma20': False,
+            'close': close,
+            'ma20': 0,
+            'distance': 0,
+            'trend': 'sideways'
+        }
+
+    distance = (close - ma20_value) / ma20_value
+    above_ma20 = close > ma20_value
+
+    if len(industry_df) >= 40:
+        recent_ma20 = ma20.iloc[-1]
+        previous_ma20 = ma20.iloc[-20]
+
+        if recent_ma20 > previous_ma20 * 1.02:
+            trend = 'uptrend'
+        elif recent_ma20 < previous_ma20 * 0.98:
+            trend = 'downtrend'
+        else:
+            trend = 'sideways'
+    else:
+        trend = 'sideways'
+
+    return {
+        'above_ma20': above_ma20,
+        'close': close,
+        'ma20': ma20_value,
+        'distance': distance,
+        'trend': trend,
+    }
+
+
+def get_industry_trend(industry_df: pd.DataFrame, ma_periods: list = None) -> Dict[str, Any]:
+    """
+    获取行业趋势综合分析
+    """
+    if ma_periods is None:
+        ma_periods = [5, 10, 20, 60]
+
+    if industry_df is None or industry_df.empty or 'close' not in industry_df.columns:
+        return {
+            'trend': 'sideways',
+            'above_ma20': False,
+            'above_ma60': False,
+            'ma_levels': {},
+            'strength': 0
+        }
+
+    ma_values = {}
+    for period in ma_periods:
+        if len(industry_df) >= period:
+            ma = industry_df['close'].rolling(window=period).mean()
+            ma_values[f'ma{period}'] = ma.iloc[-1]
+
+    close = industry_df['close'].iloc[-1]
+
+    above_ma20 = ma_values.get('ma20', 0) and close > ma_values['ma20']
+    above_ma60 = ma_values.get('ma60', 0) and close > ma_values['ma60']
+
+    strength = 0
+    if above_ma20:
+        strength += 50
+    if above_ma60:
+        strength += 30
+    if ma_values.get('ma20', 0) > ma_values.get('ma60', 0):
+        strength += 20
+
+    if strength >= 70:
+        trend = 'uptrend'
+    elif strength >= 40:
+        trend = 'sideways'
+    else:
+        trend = 'downtrend'
+
+    return {
+        'trend': trend,
+        'above_ma20': above_ma20,
+        'above_ma60': above_ma60,
+        'ma_levels': ma_values,
+        'strength': strength,
+        'close': close,
+    }
+
+
+def check_industry_momentum(industry_df: pd.DataFrame, periods: list = None) -> Dict[str, Any]:
+    """
+    检查行业动量 - 短期、中期、长期趋势
+    """
+    if periods is None:
+        periods = [5, 20, 60]
+
+    if industry_df is None or industry_df.empty:
+        return {
+            'short_term': 'sideways',
+            'mid_term': 'sideways',
+            'long_term': 'sideways',
+            'momentum_score': 0
+        }
+
+    momentum = {}
+
+    for period in periods:
+        if len(industry_df) >= period:
+            current_price = industry_df['close'].iloc[-1]
+            past_price = industry_df['close'].iloc[-period]
+
+            if past_price > 0:
+                change_pct = (current_price - past_price) / past_price * 100
+
+                if change_pct > 5:
+                    momentum[f'{period}d'] = 'up'
+                elif change_pct < -5:
+                    momentum[f'{period}d'] = 'down'
+                else:
+                    momentum[f'{period}d'] = 'sideways'
+            else:
+                momentum[f'{period}d'] = 'sideways'
+        else:
+            momentum[f'{period}d'] = 'sideways'
+
+    # 计算动量得分
+    momentum_score = 0
+    for period in periods:
+        if momentum.get(f'{period}d') == 'up':
+            if period == 5:
+                momentum_score += 30
+            elif period == 20:
+                momentum_score += 40
+            elif period == 60:
+                momentum_score += 30
+
+    return {
+        'short_term': momentum.get('5d', 'sideways'),
+        'mid_term': momentum.get('20d', 'sideways'),
+        'long_term': momentum.get('60d', 'sideways'),
+        'momentum_score': momentum_score
+    }

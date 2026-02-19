@@ -32,6 +32,14 @@ CACHE_EXPIRY = {
     'adj_factor': 30,
     'industry_rps': 1,
     'daily_data': 1,
+    'holder_trade': 7,
+    'holder_number': 30,
+    'main_business': 90,
+    'limit_list': 7,
+    'stk_redeem': 30,
+    'margin': 1,
+    'inst_holder': 30,
+    'longhu_bang': 7,
 }
 
 
@@ -143,14 +151,25 @@ def save_adj_factor_cache(df: pd.DataFrame | None):
     save_cache('adj_factor', df)
 
 
-def load_industry_rps_cache() -> pd.DataFrame | None:
-    """加载行业RPS缓存"""
-    return load_cache('industry_rps')
+def load_industry_rps_cache(level: str = 'L1') -> pd.DataFrame | None:
+    """加载行业RPS缓存
+    
+    Args:
+        level: 行业级别，用于区分不同级别的缓存
+    """
+    cache_key = f'industry_rps_{level}'
+    return load_cache(cache_key)
 
 
-def save_industry_rps_cache(df: pd.DataFrame | None):
-    """保存行业RPS缓存"""
-    save_cache('industry_rps', df)
+def save_industry_rps_cache(df: pd.DataFrame | None, level: str = 'L1'):
+    """保存行业RPS缓存
+    
+    Args:
+        df: 行业RPS数据
+        level: 行业级别，用于区分不同级别的缓存
+    """
+    cache_key = f'industry_rps_{level}'
+    save_cache(cache_key, df)
 
 
 def load_daily_cache(ts_code: str) -> pd.DataFrame | None:

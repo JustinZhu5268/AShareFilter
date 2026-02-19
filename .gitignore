@@ -20,33 +20,34 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Virtual environments
 venv/
-ENV/
 env/
+ENV/
 .venv
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
+*~
 
-# Cache
-data_cache/
-
-# Pytest
+# Testing
 .pytest_cache/
-
-# Report files (generated)
-选股报告_*.md
-选股结果*.csv
+.coverage
+htmlcov/
+.tox/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Coverage
-.coverage
-htmlcov/
+# Cursor
+.cursor/
+
+# Data cache (optional - keep for now)
+# data_cache/
+
+# Logs
 *.log
